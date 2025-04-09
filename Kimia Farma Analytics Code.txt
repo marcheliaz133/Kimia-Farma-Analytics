@@ -1,0 +1,77 @@
+CREATE TABLE esoteric-mote-454913-k0.kimia_farma.tabel_analisa AS
+WITH kf AS (
+  SELECT 
+      ft.transaction_id, 
+      ft.date, 
+      ft.branch_id, 
+      kc.branch_name, 
+      kc.kota, 
+      kc.provinsi, 
+      kc.rating AS rating_cabang,
+      ft.customer_name, 
+      ft.product_id, 
+      p.product_name, 
+      ft.price AS actual_price,
+      ft.discount_percentage, 
+      ft.price - (ft.discount_percentage * ft.price) AS nett_sales,
+      ft.rating AS rating_transaksi
+  FROM kimia_farma.kf_final_transaction AS ft
+  LEFT JOIN kimia_farma.kf_kantor_cabang AS kc
+      ON ft.branch_id = kc.branch_id
+  LEFT JOIN kimia_farma.kf_product AS p 
+      ON ft.product_id = p.product_id
+)
+SELECT 
+    *,  -- Mengambil semua kolom dari CTE
+    CASE 
+      WHEN nett_sales <= 50000 THEN '10%'
+      WHEN nett_sales > 50000 AND nett_sales <= 100000 THEN '15%'
+      WHEN nett_sales > 100000 AND nett_sales <= 300000 THEN '20%'
+      WHEN nett_sales > 300000 AND nett_sales <= 500000 THEN '25%'
+      ELSE '30%'
+    END AS persentase_gross_laba,
+    CASE
+      WHEN nett_sales <= 50000 THEN nett_sales * 0.1
+      WHEN nett_sales > 50000 AND nett_sales <= 100000 THEN nett_sales * 0.15
+      WHEN nett_sales > 100000 AND nett_sales <= 300000 THEN nett_sales * 0.2
+      WHEN nett_sales > 300000 AND nett_sales <= 500000 THEN nett_sales * 0.25
+      ELSE nett_sales * 0.3
+    END AS nett_profit
+FROM kf;
+
+---Memanggil Tabel Agregasi
+SELECT*FROM esoteric-mote-454913-k0.kimia_farma.tabel_analisa;
+
+---Perbandingan Pendapatan Kimia Farma dari tahun ke tahun
+select extract(year from date) AS tahun, sum(nett_sales) 
+AS pendapatan from kimia_farma.tabel_analisa GROUP BY tahun order by tahun;
+
+---Top 10 Total transaksi cabang provinsi
+select provinsi, count(transaction_id) AS total_transaksi 
+from kimia_farma.tabel_analisa GROUP BY provinsi order by total_transaksi desc limit 10 ;
+
+---Top 10 Nett sales cabang provinsi
+select provinsi, sum(nett_sales) AS total_nett_sales from kimia_farma.tabel_analisa 
+GROUP BY provinsi order by total_nett_sales desc limit 10 ;
+
+---Top 5 Cabang Dengan Rating Tertinggi, namun Rating Transaksi Terendah
+SELECT branch_id, branch_name, ROUND(AVG(rating_cabang),2) AS avg_rating_cabang, 
+       ROUND(AVG(rating_transaksi),2) AS avg_rating_transaksi
+FROM esoteric-mote-454913-k0.kimia_farma.tabel_analisa
+GROUP BY branch_id, branch_name
+ORDER BY avg_rating_cabang DESC, avg_rating_transaksi ASC
+LIMIT 5;
+
+
+---Total Nett Profit Masing-masing Provinsi
+SELECT 
+    provinsi,  
+    ROUND(SUM(nett_profit),2) AS total_nett_profit
+FROM esoteric-mote-454913-k0.kimia_farma.tabel_analisa
+GROUP BY provinsi
+ORDER BY total_nett_profit DESC;
+
+---Top 5 Produk Terlaris
+select product_id, product_name, count(transaction_id) AS total_transaksi 
+from kimia_farma.tabel_analisa GROUP BY product_id, product_name
+ order by total_transaksi desc limit 5 ;
